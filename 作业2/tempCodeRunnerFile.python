@@ -1,0 +1,169 @@
+import io
+import random
+import sys
+import tkinter
+from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
+import requests
+import sv_ttk
+import re
+import urllib.request,urllib.error
+import bs4
+import os
+import json
+import urllib.parse
+from fake_useragent import UserAgent
+import time
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import tkinter as tk
+import unittest
+
+cookie = {
+    'login_referer': 'https%3A%2F%2Fwww.luogu.com.cn%2Fproblem%2FP1000',
+    '_uid': '111884',
+    '__client_id': '4f1bbbf98da6e49a6c98727320089c851c18d53c',
+    'C3VK': 'aa6e71',
+}
+
+kw=""
+time=0
+difficulty=0
+al=0
+data=[]
+baseUrl = "https://www.luogu.com.cn/problem/"
+baseUrl1 = "https://www.luogu.com.cn/problem/list?"
+baseUrlSolution = "https://www.luogu.com.cn/problem/solution/"
+savePath = r"C:\Users\86135\Desktop\Homework-main\\"
+
+#单元测试
+def sub(a,b):
+    return a-b
+class TestSubFunction(unittest.TestCase):
+    def test_sub(self):
+        result=sub(7,1)
+        self.assertEqual(result,6)
+
+def get_tm_MD(html):
+    bs = bs4.BeautifulSoup(html,"html.parser")
+    core = bs.select("article")[0]
+    md = str(core)
+    sussces=""
+    pattern1 = re.compile(r'<h1>.*?</h1>')
+    matches = re.findall(pattern1, md)
+    sussces=matches[0]
+    print(sussces)
+    sussces = re.sub("<h1>", "",sussces)
+    sussces = re.sub("</h1>", "", sussces)
+    md = re.sub("<h1>","# ",md)
+    md = re.sub("<h2>","## ",md)
+    md = re.sub("<h3>","#### ",md)
+    md = re.sub("</?[a-zA-Z]+[^<>]*>","",md)
+    return md,sussces
+def get_tj_MD(html):
+    soup = bs4.BeautifulSoup(html, "html.parser")
+    encoded_content_element = soup.find('script')
+    encoded_content = encoded_content_element.text
+    start = encoded_content.find('"')
+    end = encoded_content.find('"', start + 1)
+    encoded_content = encoded_content[start + 1:end]
+    decoded_content = urllib.parse.unquote(encoded_content)
+    decoded_content = decoded_content.replace('\/', '/')
+    decoded_content = decoded_content.encode('utf-8').decode('unicode_escape')
+    start = decoded_content.find('"content":"')
+    end = decoded_content.find('","type":"题解"')
+    decoded_content = decoded_content[start + 11:end]
+    return decoded_content
+def save_tm_Data(data,filename):
+  file = open(filename,"w",encoding="utf-8")
+  for d in data:
+    file.writelines(d)
+  file.close()
+
+class CrawlProblemsDemo(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, style="Card.TFrame", padding=15)
+        self.columnconfigure(0, weight=1)
+        self.add_widgets()
+
+    def add_widgets(self):
+        self.entry = ttk.Entry(self)
+        self.entry.grid(row=2, column=0, padx=5, pady=10, sticky="ew")
+
+        save_button = ttk.Button(self, text="保存")
+        save_button.grid(row=3, column=0, padx=5, pady=10, sticky="ew")
+
+        output_label = ttk.Label(self)
+        output_label.grid(row=4, column=0, padx=5, pady=(10, 0), sticky="w")
+
+        def on_save_button_click():
+            keyword = self.entry.get().strip()
+            if not keyword:
+                output_label.configure(text="请输入关键词")
+                return
+
+            save_path = keyword
+            if not os.path.exists(save_path):
+                os.mkdir(save_path)
+
+            base_url = "https://www.luogu.com.cn/problem/list?"  # 请替换成实际的网址
+
+            Td = base_url + "?keyword=" + keyword
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+            }
+            resp = requests.get(Td, headers=headers)
+            pattern = re.compile(r'(<a\shref=".*?">)*?')
+            p = re.findall(pattern, resp.text)
+            problem_numbers = []
+            for x in p:
+                if (x != ""):
+                    problem_numbers.append(x[9:14])
+
+            cnt = 0
+            for i, number in enumerate(problem_numbers):
+                cnt += 1
+                if cnt > 20:
+                    break
+                title = "正在爬取第{}题,题目编号为{}".format(i + 1, number)
+                output_label.configure(text=title)
+                output_label.update()
+                print("正在爬取第{}题\n".format(i), end="")
+                url = base_url + number
+                r = requests.get(url, headers=headers)
+                htmltm = r.text
+                if htmltm == "error":
+                    print("爬取失败，可能是不存在该题或无权查看")
+                else:
+                    problemMD, num = get_tm_MD(htmltm)
+                    print("爬取成功！正在保存\n", end="")
+                    cleaned_number = re.sub(r'[\\/:*?"<>|\[\]]', '-', number)
+                    folder_path = os.path.join(save_path, f"{cleaned_number}")
+                    if not os.path.exists(folder_path):
+                        os.mkdir(folder_path)
+                    problem_file_path = os.path.join(folder_path, f"{number}.md")
+                    save_tm_Data(problemMD, problem_file_path)
+                    print("保存成功!\n")
+
+            output_label.configure(text="爬取完毕")
+
+        save_button.configure(command=on_save_button_click)
+
+class App(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, padding=15)
+        for index in range(2):
+            self.columnconfigure(index, weight=1)
+            self.rowconfigure(index, weight=1)
+        CrawlProblemsDemo(self).grid(
+            row=0, column=1, rowspan=2, padx=10, pady=(10, 0), sticky="nsew"
+        )
+def main():
+    root = tkinter.Tk()
+    root.title("")
+    sv_ttk.set_theme("dark")
+    App(root).pack(expand=True, fill="both")
+    root.mainloop()
+if __name__ == "__main__":
+    main()
+    #unittest.main()
